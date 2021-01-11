@@ -1,6 +1,7 @@
 package com.example.messageboard.controller;
 
 import com.example.messageboard.model.Note;
+import com.example.messageboard.model.Status;
 import com.example.messageboard.model.User;
 import com.example.messageboard.service.NoteService;
 import com.example.messageboard.service.UserService;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.security.Principal;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/notes")
@@ -25,17 +27,32 @@ public class NoteController {
         this.userService = userService;
     }
 
-    @GetMapping
-    public ResponseEntity<List<Note>> getAll() {
-        List<Note> notes = noteService.getAll();
+    @GetMapping()
+    public ResponseEntity<List<Note>> getAll(Principal principal) {
+        List<Note> notes = null;
+        if (principal == null || !isAdmin(principal)) {
+            notes = noteService.getAll().stream()
+                    .filter(n -> !n.getStatus()
+                            .equals(Status.MODERATION))
+                    .collect(Collectors.toList());
+        } else {
+            notes = noteService.getAll();
+        }
         return !notes.isEmpty()
                 ? new ResponseEntity<>(notes, HttpStatus.OK)
                 : new ResponseEntity<>(HttpStatus.NOT_FOUND);
     }
 
     @GetMapping("{id}")
-    public ResponseEntity<Note> getById(@PathVariable Long id) {
-        Note note = noteService.getById(id);
+    public ResponseEntity<Note> getById(@PathVariable Long id, Principal principal) {
+        Note note = null;
+        if (principal == null || !isAdmin(principal)) {
+            if (!noteService.getById(id).getStatus().equals(Status.MODERATION)) {
+                note = noteService.getById(id);
+            }
+        } else {
+            note = noteService.getById(id);
+        }
         return note != null
                 ? new ResponseEntity<>(note, HttpStatus.OK)
                 : new ResponseEntity<>(HttpStatus.NOT_FOUND);
@@ -45,6 +62,7 @@ public class NoteController {
     public ResponseEntity<?> create(@RequestBody Note note, Principal principal) {
         User user = userService.findByEmail(principal.getName());
         note.setUser_id(user.getId());
+        note.setStatus(Status.MODERATION);
         noteService.create(note);
         return new ResponseEntity<>(HttpStatus.OK);
     }
